@@ -8,17 +8,17 @@ A resilient, zero-configuration Bash utility designed for Linux systems that aut
 
 * **Automatic English Title Prepending:** Transforms release names like `Nokemono-tachi no Yoru S01 1080p WEBRip AAC x265-EMBER` into `(The Tale of the Outcasts) Nokemono-tachi no Yoru S01 1080p WEBRip AAC x265-EMBER`.
 * **Japanese Anime & Chinese Donghua Support:** Powered by AniList's GraphQL API, natively indexing both Japanese anime and Chinese donghua (Bilibili/Tencent releases), with dual-stage CJK fallback queries.
-* **Pre-Flight Network & Dependency Diagnostics:** Validates CLI dependencies (`curl`, `jq`, `sed`)[cite: 1] and performs an upfront HTTP status check against the API before scanning the filesystem.
+* **Pre-Flight Network & Dependency Diagnostics:** Validates CLI dependencies (`curl`, `jq`, `sed`) and performs an upfront HTTP status check against the API before scanning the filesystem.
 * **Real-Time Terminal Telemetry:** Displays step-by-step tree output (`├─`, `└─`) with dynamic `[LOADING]` indicators, HTTP status reporting, and final execution summaries.
-* **In-Memory Title Caching:** Uses Bash associative arrays (`declare -A`) to cache API responses during execution, preventing redundant API calls across multi-season or multi-episode directories[cite: 1].
+* **In-Memory Title Caching:** Uses Bash associative arrays (`declare -A`) to cache API responses during execution, preventing redundant API calls across multi-season or multi-episode directories.
 * **Idempotent & Re-Run Safe:** Automatically detects and skips folders that have already been prepended, already have matching English titles, or belong to the system ignore list (`AnyDesk`, `.git`, `node_modules`).
-* **Dry-Run Preview Mode:** Supports `--dry-run` to preview all regex extractions, API lookups, and target filenames without modifying the disk[cite: 1].
+* **Dry-Run Preview Mode:** Supports `--dry-run` to preview all regex extractions, API lookups, and target filenames without modifying the disk.
 
 ---
 
 ## 🛠️ Prerequisites
 
-Ensure the following standard utilities are installed on your Linux distribution[cite: 1]:
+Ensure the following standard utilities are installed on your Linux distribution:
 
 * `bash` (v4.2+ for associative array support)
 * `curl`
@@ -49,7 +49,7 @@ sudo pacman -S curl jq sed
    chmod +x anime.sh
    ```
 
-2. **Preview Changes (Recommended):** Run with the `--dry-run` flag to verify API matches and preview new names without renaming anything on disk[cite: 1]:
+2. **Preview Changes (Recommended):** Run with the `--dry-run` flag to verify API matches and preview new names without renaming anything on disk:
    ```bash
    ./anime.sh --dry-run
    ```
@@ -82,7 +82,7 @@ Summary: 1 renamed | 1 skipped | 0 errors
 
 | Component / Decision | What Was Chosen | Why It Was Chosen |
 | :--- | :--- | :--- |
-| **Primary Metadata Engine** | **AniList GraphQL API** (`https://graphql.anilist.co`) over Jikan REST API (`api.jikan.moe`)[cite: 1] | 1. **Network Reachability:** Jikan's origin IP (`135.181.39.91` on Hetzner) is frequently blackholed or throttled by regional ISPs, whereas AniList routes cleanly through Cloudflare CDN.<br>2. **Donghua Indexing:** MyAnimeList (Jikan) lacks many Chinese animations (Donghua) or restricts them to obscure Pinyin entries. AniList natively indexes Bilibili/Chinese releases alongside Japanese anime.<br>3. **Structured GraphQL Payloads:** Allows requesting exact fields (`romaji`, `english`, `native`, `synonyms`) in a single lightweight POST request. |
+| **Primary Metadata Engine** | **AniList GraphQL API** (`https://graphql.anilist.co`) over Jikan REST API (`api.jikan.moe`)  | 1. **Network Reachability:** Jikan's origin IP (`135.181.39.91` on Hetzner) is frequently blackholed or throttled by regional ISPs, whereas AniList routes cleanly through Cloudflare CDN.<br>2. **Donghua Indexing:** MyAnimeList (Jikan) lacks many Chinese animations (Donghua) or restricts them to obscure Pinyin entries. AniList natively indexes Bilibili/Chinese releases alongside Japanese anime.<br>3. **Structured GraphQL Payloads:** Allows requesting exact fields (`romaji`, `english`, `native`, `synonyms`) in a single lightweight POST request. |
 | **Transport Layer Enforcement** | **`curl -4`** with explicit `--connect-timeout` & custom `User-Agent` | Dual-stack networks with broken IPv6 routing cause `curl` to hang while attempting `AAAA` record handshakes. Forcing IPv4 (`-4`) with strict timeouts (`6s` connect, `12s` max) guarantees fast execution. A Mozilla `User-Agent` prevents Cloudflare bot rules from dropping bare `curl` requests. |
 | **Title Placement Strategy** | **Prepending `(${eng_title})`** to the start of the filename | Placing the English title at the start improves alphabetical sorting and immediate visual scanning in terminal (`ls`) and GUI file managers (Dolphin/Nautilus), whereas appended titles get cut off at the end of long release strings. |
 | **Bracket Sanitization Logic** | **Asymmetric Bracket Stripping** (Strip leading `[...]`, preserve leading `(...)`) | Release groups almost universally use square brackets at the start of filenames (e.g., `[SubsPlease]`, `[Cortyx]`). By only stripping leading `[...]` during title extraction and reserving leading `(...)` for our prepended English titles, the script achieves idempotency (`^\([^)]+\)`), preventing recursive renaming on subsequent runs. |
@@ -102,7 +102,7 @@ Summary: 1 renamed | 1 skipped | 0 errors
   Trying 135.181.39.91:443...
   curl: (28) Connection timed out after 5000 milliseconds
   ```
-* **Root Cause:** The original script used `curl -sG` without `--connect-timeout` or `--max-time` against `api.jikan.moe`[cite: 1]. Because the host IP (`135.181.39.91`) was blackholed on the network, every folder triggered a default OS socket timeout. Once `curl` timed out and returned an empty string, `jq` evaluated `.data[0].title_english` as empty[cite: 1], causing every folder to hit the `[NO MATCH]` branch or exit silently due to `set -euo pipefail`[cite: 1].
+* **Root Cause:** The original script used `curl -sG` without `--connect-timeout` or `--max-time` against `api.jikan.moe` . Because the host IP (`135.181.39.91`) was blackholed on the network, every folder triggered a default OS socket timeout. Once `curl` timed out and returned an empty string, `jq` evaluated `.data[0].title_english` as empty , causing every folder to hit the `[NO MATCH]` branch or exit silently due to `set -euo pipefail` .
 * **Fix:** Migrated the backend to `https://graphql.anilist.co`, added an upfront startup connectivity check, and enforced `--connect-timeout 6 --max-time 12` on all `curl` invocations.
 
 ### 2. False `HTTP 000000` Status Code in Diagnostics
@@ -117,10 +117,10 @@ Summary: 1 renamed | 1 skipped | 0 errors
 
 ### 4. Uncleaned Episode Ranges & Non-Anime Folders
 * **Symptom:** Folders like `[Prejudice-Studio] 记忆管理局 False Memory [01-07][Bilibili WEB-DL...]` retained `[01-07]` in the search query, and utility folders like `AnyDesk/` were queried as anime titles.
-* **Root Cause:** The original `sed` pipeline only matched `S01` or `E01` season/episode formats[cite: 1] and lacked a directory exclusion list.
+* **Root Cause:** The original `sed` pipeline only matched `S01` or `E01` season/episode formats  and lacked a directory exclusion list.
 * **Fix:** Added a dedicated regex pass (`s/[[:space:]._-]*\[[0-9]{1,3}[-~][0-9]{1,3}\].*//`) to strip bracketed episode ranges (`[01-07]`, `[01~12]`) and implemented an `IGNORE_LIST` array (`AnyDesk`, `.git`, `node_modules`).
 
 ### 5. Re-Run Collision Risk When Switching from Append to Prepend
 * **Symptom:** Moving `(${eng_title})` to the start of the filename risked having the script strip the newly added English title on future runs.
-* **Root Cause:** Step 1 of `clean_anime_name()` originally used `s/^(\[[^]]+\]|\([^)]+\))[[:space:]._-]*//`[cite: 1], which stripped both `[square brackets]` and `(parentheses)` from the start of a filename[cite: 1].
+* **Root Cause:** Step 1 of `clean_anime_name()` originally used `s/^(\[[^]]+\]|\([^)]+\))[[:space:]._-]*//` , which stripped both `[square brackets]` and `(parentheses)` from the start of a filename .
 * **Fix:** Restricted Step 1 of `clean_anime_name()` to only strip leading square brackets (`^\[[^]]+\]`), and added an explicit guard (`if [[ "$name_part" =~ ^\([^)]+\)[[:space:]]+ ]]`) to immediately skip items that already have a parenthesized title prepended.
