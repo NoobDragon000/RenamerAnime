@@ -60,6 +60,11 @@ RENAMED_COUNT=0
 SKIPPED_COUNT=0
 ERROR_COUNT=0
 
+# Stored in variables to prevent Bash parser syntax errors with parentheses inside [[ =~ ]]
+PREPEND_REGEX='^\([^)]+\)[[:space:]]+'
+NON_ASCII_REGEX='[^[:ascii:]]'
+ALPHA_REGEX='[A-Za-z]'
+
 clean_anime_name() {
     local raw="$1"
     local cleaned="$raw"
@@ -142,7 +147,7 @@ for item in "$SCRIPT_DIR"/*; do
     fi
 
     # Skip immediately if the item already starts with a parenthesized title from a previous run
-    if [[ "$name_part" =~ ^\([^)]+\)[[:space:]]+ ]]; then
+    if [[ "$name_part" =~ $PREPEND_REGEX ]]; then
         echo -e "    └─ ${CYAN}[ALREADY PREPENDED]${NC} '$base_name' already has a title at the start."
         ((SKIPPED_COUNT++))
         continue
@@ -166,7 +171,7 @@ for item in "$SCRIPT_DIR"/*; do
         query_anilist "$query_title"
 
         # If mixed Chinese/English string returns 404 (e.g. "记忆管理局 False Memory"), try searching just the CJK part
-        if [[ "$API_HTTP_CODE" == "404" ]] && [[ "$query_title" =~ [^[:ascii:]] ]] && [[ "$query_title" =~ [A-Za-z] ]]; then
+        if [[ "$API_HTTP_CODE" == "404" ]] && [[ "$query_title" =~ $NON_ASCII_REGEX ]] && [[ "$query_title" =~ $ALPHA_REGEX ]]; then
             cjk_only="$(echo "$query_title" | sed -E 's/[[:ascii:]]+//g; s/^[[:space:]]+//; s/[[:space:]]+$//')"
             if [[ -n "$cjk_only" ]]; then
                 echo -ne "\r\033[K    ├─ ${YELLOW}[LOADING]${NC} Retrying AniList API with native title '$cjk_only'..."
