@@ -1,0 +1,6 @@
+/target/
+/ui/node_modules/
+/backups/
+/dist/
+/.renamer-data/
+*.tmp

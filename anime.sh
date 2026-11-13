@@ -2,6 +2,42 @@
 set -uo pipefail
 shopt -s nullglob
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Use v2.0 renamer-cli core by default unless --legacy is requested
+USE_LEGACY=false
+FORWARD_ARGS=()
+for arg in "$@"; do
+    if [[ "$arg" == "--legacy" ]]; then
+        USE_LEGACY=true
+    else
+        FORWARD_ARGS+=("$arg")
+    fi
+done
+
+if [[ "$USE_LEGACY" == false ]]; then
+    CLI_BIN=""
+    for candidate in \
+        "$SCRIPT_DIR/target/release/renamer-cli" \
+        "$SCRIPT_DIR/target/release/renamer-cli.exe" \
+        "$SCRIPT_DIR/target/debug/renamer-cli" \
+        "$SCRIPT_DIR/target/debug/renamer-cli.exe"; do
+        if [[ -x "$candidate" ]]; then
+            CLI_BIN="$candidate"
+            break
+        fi
+    done
+
+    if [[ -n "$CLI_BIN" ]]; then
+        exec "$CLI_BIN" "${FORWARD_ARGS[@]}"
+    elif command -v renamer-cli &>/dev/null; then
+        exec renamer-cli "${FORWARD_ARGS[@]}"
+    elif command -v cargo &>/dev/null && [[ -f "$SCRIPT_DIR/Cargo.toml" ]]; then
+        exec cargo run -q --manifest-path "$SCRIPT_DIR/Cargo.toml" -p renamer-cli -- "${FORWARD_ARGS[@]}"
+    fi
+fi
+
+# --- Legacy v1.0 Bash implementation fallback ---
 # Colors for terminal output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -11,12 +47,11 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 DRY_RUN=false
-if [[ "${1:-}" == "--dry-run" ]]; then
+if [[ "${FORWARD_ARGS[0]:-}" == "--dry-run" ]]; then
     DRY_RUN=true
     echo -e "${YELLOW}=== DRY RUN MODE: No files or folders will be renamed ===${NC}"
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SCRIPT_NAME="$(basename "${BASH_SOURCE[0]}")"
 USER_AGENT="Mozilla/5.0 (X11; Linux x86_64; rv:128.0) Gecko/20100101 Firefox/128.0"
 

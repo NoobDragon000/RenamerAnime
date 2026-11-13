@@ -1,4 +1,30 @@
-# RenamerAnime
+# RenamerAnime v2.0
+
+A lightweight, cross-platform GUI + CLI utility (Windows 10/11, Fedora KDE Plasma Wayland, and Android) powered by a single shared Rust core (`renamer-core`), **Tauri v2**, and **React + TypeScript**. It parses messy anime/donghua release names, cleans scene/codec tags via data-driven JSON rules, queries **AniList GraphQL API** with adaptive rate limiting and persistent caching, and previews/applies safe reversible renames.
+
+## ✨ v2.0 Capabilities & Architecture
+
+- **Shared Rust Core (`crates/renamer-core`):**
+  - Data-driven tag cleanup (`rules/default_rules.json`) stripping release groups (`[Judas]`, `[neoHEVC]`, `[Anime Time]`, `-EMBER`), quality/codec/source/audio tags (`1080p`, `HEVC`, `x265`, `10bit`, `WEB-DL`, `BD`, `Dual Audio`), CRC32 hashes, version markers (`v2`), and `COMPLETE`/`Batch` keywords while preserving season numbers (`(Season 1)`, `(Seasons 1-2)`), years, episode numbers, `+ Special / OVA / Movie` notes, and file extensions.
+  - Naming modes: **English Title Only** (`In-Spectre (Season 2)`), **Prepend** (`(In-Spectre) Kyokou Suiri (Season 2)`), and **Append** (`Kyokou Suiri (In-Spectre) (Season 2)`), plus Option A episode formatting.
+  - Adaptive AniList GraphQL client (`Page(perPage: 5)` batched queries, `X-RateLimit-*` pacing, `Retry-After` exponential backoff, and CJK fallback).
+  - Persistent local cache (`title_cache.json`, `processed_items.json`, `manual_overrides.json`) and atomic bottom-up execution with one-click JSON transaction rollback (`transactions/latest.json`).
+- **Cross-Platform Desktop & Mobile (`crates/renamer-gui` + `ui/`):**
+  - Desktop GUI for Windows 10/11 & Fedora Linux (with `WEBKIT_DISABLE_DMABUF_RENDERER=1` Wayland/KDE Plasma guard).
+  - **Android Storage Access Framework (`content://` URIs):** `build_virtual_rename_plan` + `SafBridge.kt` (`ACTION_OPEN_DOCUMENT_TREE`, `DocumentsContract.buildChildDocumentsUriUsingTree`, `DocumentsContract.renameDocument`) plus desktop-testable **SAF (content://) Demo** mode.
+- **CLI & Legacy Wrapper (`crates/renamer-cli` + `anime.sh`):**
+  - `renamer-cli` subcommands: `run`, `scan`, `undo`, `history`, `override`, `parse`, `demo-library`.
+  - `anime.sh` delegates to `renamer-cli` automatically (use `--legacy` for original v1.0 Bash behavior).
+
+## 📦 Packaging & Release Scripts
+
+- **Windows (`x86_64`):** Run `.\packaging\windows\package-release.ps1` to generate `dist\RenamerAnime-v2.0.0-windows-x64.zip`.
+- **Fedora Linux (`x86_64` / KDE Wayland):** Run `./packaging/linux/package-fedora.sh` to build `.tar.gz` (and `.rpm` when `rpmbuild` is installed).
+- **Android APK (SAF `content://`):** Requires Android SDK + NDK (API 34+); run `.\packaging\android\build-android-apk.ps1` or trigger the GitHub Actions workflow in `.github/workflows/release.yml`.
+
+---
+
+## Legacy v1.0 Bash Script Documentation
 
 A resilient, zero-configuration Bash utility designed for Linux systems that automatically parses messy anime and donghua release names (Romaji, Pinyin, or CJK), queries the **AniList GraphQL API**, and prepends the official English title to the beginning of the folder or file name.
 

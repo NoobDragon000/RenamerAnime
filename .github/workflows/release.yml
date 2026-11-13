@@ -1,0 +1,64 @@
+name: Release Packages
+
+on:
+  push:
+    branches:
+      - "main"
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build Frontend & Standalone Windows EXE (MSVC Static WebView2)
+        shell: pwsh
+        run: |
+          cd ui
+          npm ci
+          npm run build
+          cd ..
+          cargo build --release -p renamer-gui -p renamer-cli
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item target/release/renamer-gui.exe dist/RenamerAnime-v2.0.0-windows-x64.exe -Force
+          Get-Item dist/RenamerAnime-v2.0.0-windows-x64.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RenamerAnime-v2.0.0-windows-x64.exe
+          path: dist/RenamerAnime-v2.0.0-windows-x64.exe
+
+  linux-appimage:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install Linux WebKit2GTK & GTK3 Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+      - name: Build Standalone Linux AppImage
+        run: |
+          chmod +x packaging/linux/build-appimage.sh
+          bash packaging/linux/build-appimage.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: RenamerAnime-v2.0.0-linux-x86_64.AppImage
+          path: dist/RenamerAnime-v2.0.0-linux-x86_64.AppImage

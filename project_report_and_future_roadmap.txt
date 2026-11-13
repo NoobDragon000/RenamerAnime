@@ -1,0 +1,191 @@
+================================================================================
+PROJECT REPORT: ANIME MEDIA RENAMER (CLI TO CROSS-PLATFORM GUI)
+Date: October 24, 2026
+Environment: Fedora Linux (Bash CLI) -> Cross-Platform (Linux, Windows, Android)
+Current CLI Version: v1.0.0
+================================================================================
+
+1. EXECUTIVE SUMMARY
+--------------------------------------------------------------------------------
+This project began as a troubleshooting and modernization effort for `anime.sh`,
+a Bash utility script designed to automatically parse downloaded anime and
+donghua folder/file names, fetch their official English titles via an external
+API, and rename them on disk. 
+
+Originally, the script suffered from long, silent network hangs followed by
+false reports that no files needed renaming. Through systematic network
+diagnostics, regex refinement, and API migration, we transformed the script
+into a fast, fault-tolerant CLI tool powered by the AniList GraphQL API,
+complete with real-time terminal telemetry and idempotent title prepending.
+Following the stabilization and GitHub release of the CLI tool, we defined the
+software architecture and technology stack required to evolve this utility into
+a cross-platform GUI application for Linux, Windows, and Android.
+
+
+2. INITIAL PROBLEM STATEMENT & ROOT CAUSE ANALYSIS
+--------------------------------------------------------------------------------
+When running the original `anime.sh` script inside `/home/noobdragon/Videos`
+across a testbed of anime, donghua, and utility folders:
+  - AnyDesk/
+  - [Cortyx] Ling Cage S1 (1080p)/
+  - Farmagia S01 1080p WEBRip DD+ x265-EMBER/
+  - Hortensia Saga S01 1080p Dual Audio BDRip 10 bits DD x265-EMBER/
+  - [Ironclad] THE GHOST IN THE SHELL - S01 [WEB.1080p.AV1]/
+  - Nokemono-tachi no Yoru S01 1080p WEBRip AAC x265-EMBER/
+  - [Prejudice-Studio] 记忆管理局 False Memory [01-07][Bilibili WEB-DL...]/
+  - Tensei Kizoku, Kantei Skill de Nariagaru S02 1080p WEBRip AAC x265-EMBER/
+
+We identified five distinct root causes preventing the script from working:
+
+A. Network Blackholing of the Jikan API (`api.jikan.moe`)
+   - Diagnostic tests (`curl -4 -v`) revealed that `api.jikan.moe` resolved to
+     the Hetzner IP `135.181.39.91`, which timed out completely (`curl: (28)
+     Connection timed out after 5000 milliseconds`) due to ISP/routing blocks.
+
+B. Unbounded `curl` Requests & Strict Pipe Failures
+   - The original script used `curl -sG` without `--connect-timeout` or
+     `--max-time` flags alongside `set -euo pipefail`. Each blocked API call
+     hung until the OS socket timeout expired, returning an empty response that
+     caused `jq` to output nothing and skip every folder silently.
+
+C. Lack of Chinese Donghua Coverage on MyAnimeList (Jikan)
+   - Folders such as `[Cortyx] Ling Cage S1` and `[Prejudice-Studio] 记忆管理局
+     False Memory` are Chinese animations (Donghua). MyAnimeList (which Jikan
+     scrapes) frequently omits Bilibili Donghua or indexes them solely under
+     Pinyin titles (`Ling Long`), causing English/mixed searches to fail.
+
+D. Incomplete Regex Sanitization & Missing Directory Exclusions
+   - The original `sed` pipeline only stripped `S01` or `E01` markers, leaving
+     bracketed episode ranges like `[01-07]` and mixed CJK/ASCII strings intact.
+   - Utility folders like `AnyDesk/` were processed as anime titles because no
+     ignore list existed.
+
+E. Bash Regex Parser Collision on Parentheses
+   - When adding a regex guard to detect already-prepended titles at the start
+     of a folder name (`if [[ "$name_part" =~ ^\([^)]+\)[[:space:]]+ ]]`),
+     Bash threw a syntax error on line 145 (`unexpected token ')'`) because raw
+     escaped parentheses inside `[[ ... =~ ... ]]` conflict with Bash subshell
+     token parsing.
+
+
+3. WHAT WE DID & WHY IT WAS DONE (CLI EVOLUTION)
+--------------------------------------------------------------------------------
+
+3.1. Migration from Jikan REST API to AniList GraphQL API
+  - WHAT WAS DONE: Replaced `https://api.jikan.moe/v4/anime` (HTTP GET) with
+    `https://graphql.anilist.co` (HTTP POST with JSON GraphQL payloads).
+  - WHY IT WAS DONE:
+    1. Reachability: AniList is fronted by Cloudflare CDN and responded
+       immediately on your network without requiring a VPN.
+    2. Donghua Support: AniList natively indexes both Japanese Anime and
+       Chinese Donghua, returning `romaji`, `english`, `native`, and `synonyms`
+       fields in a single lightweight query.
+
+3.2. Transport-Layer Hardening & Pre-Flight Health Checks
+  - WHAT WAS DONE: Enforced IPv4 (`curl -4`), added strict timeouts
+    (`--connect-timeout 6 --max-time 12`), set a standard Firefox `User-Agent`,
+    and added a startup health check that sends a minimal GraphQL `POST` probe
+    before scanning any files.
+  - WHY IT WAS DONE: Prevents broken IPv6 (`AAAA`) routing from stalling
+    connections, prevents Cloudflare from challenging bare `curl` User-Agents,
+    and ensures the script fails fast with a clear error message if the network
+    or API goes down. (Note: We used a GraphQL `POST` probe instead of `curl -I`
+    because `HEAD` requests to GraphQL endpoints return `HTTP 404`).
+
+3.3. Interactive Terminal Telemetry & Loading Indicators
+  - WHAT WAS DONE: Implemented color-coded tree logging (`├─`, `└─`), dynamic
+    `[LOADING]` indicators that clear via ANSI escape sequences (`\r\033[K`),
+    explicit HTTP status code reporting, and a final summary counter (`renamed`,
+    `skipped`, `errors`).
+  - WHY IT WAS DONE: Gives immediate visual feedback on what the script is
+    doing at every stage (cleaning title -> querying API -> respecting rate
+    limit -> renaming on disk) so it never appears frozen.
+
+3.4. Enhanced Regex Pipeline & Two-Stage CJK Fallback Search
+  - WHAT WAS DONE:
+    1. Added `IGNORE_LIST=("AnyDesk" ".git" "node_modules")` to skip non-media
+       directories.
+    2. Added a regex rule (`s/[[:space:]._-]*\[[0-9]{1,3}[-~][0-9]{1,3}\].*//`)
+       to strip episode ranges like `[01-07]`.
+    3. Added a two-stage retry mechanism: if a mixed CJK/English title (such as
+       `记忆管理局 False Memory`) returns `HTTP 404`, the script automatically
+       strips the ASCII text and queries AniList a second time using only the
+       native CJK characters (`记忆管理局`).
+  - WHY IT WAS DONE: Ensures bilingual fansub releases and multi-episode batch
+    folders resolve accurately without manual folder cleanup.
+
+3.5. Shifting from Appending to Prepending English Titles
+  - WHAT WAS DONE: Changed the target naming format from:
+      `Original_Name (English_Title)`
+    to:
+      `(English_Title) Original_Name`
+    Additionally, updated Step 1 of `clean_anime_name()` to only strip leading
+    square brackets (`^\[[^]]+\]`) while preserving leading parentheses `(...)`,
+    and stored the idempotency check regex inside a variable (`PREPEND_REGEX`).
+  - WHY IT WAS DONE: Prepending the English title places it at the very front
+    of the folder or file name, making alphabetical sorting and visual scanning
+    much easier in both terminal (`ls`) and GUI file managers. Storing the
+    regex pattern in a variable (`PREPEND_REGEX='^\([^)]+\)[[:space:]]+'`)
+    resolved the Bash line 145 parser error and guaranteed that re-running the
+    script skips already-renamed folders (`[ALREADY PREPENDED]`).
+
+3.6. GitHub Repository & Release Packaging (`v1.0.0`)
+  - WHAT WAS DONE: Audited the script for public safety (confirming zero API
+    keys or hardcoded local paths exist), configured a public GitHub repository
+    with a `README.md` and `MIT License`, and outlined the `v1.0.0` release
+    workflow.
+  - WHY IT WAS DONE: Allows versioned tracking, community sharing, and one-click
+    script downloads via GitHub Releases.
+
+
+4. FUTURE GOALS & ROADMAP: CROSS-PLATFORM GUI APPLICATION
+--------------------------------------------------------------------------------
+The next major milestone is evolving `anime.sh` from a Linux Bash script into a
+full Graphical User Interface (GUI) application that runs natively on **Linux**
+and **Windows** first, and ports cleanly to **Android** later.
+
+4.1. Target Software Architecture: Clean Core + Platform Adapters (MVVM)
+  Because Linux and Windows use direct file paths (`/home/...` or `C:\...`)
+  while Android enforces Scoped Storage and the Storage Access Framework (SAF)
+  using `content://` URIs, the application will be divided into three layers:
+
+  1. Presentation Layer (Frontend UI & ViewModel):
+     - Folder picker, live progress bars, dry-run preview table with checkboxes,
+       and manual search override dialogs.
+  2. Core Domain Layer (100% Shared Across Linux, Windows, and Android):
+     - Title sanitization regex engine.
+     - AniList GraphQL client with rate-limiting and CJK fallback logic.
+     - In-memory and local persistent title cache.
+  3. Infrastructure / Platform Adapter Layer (OS-Specific):
+     - Desktop Adapter (Linux/Windows): Standard POSIX/Win32 filesystem reads
+       and `rename` operations.
+     - Mobile Adapter (Android): Uses Android's `DocumentFile` / SAF APIs to
+       rename folders and files safely with user-granted URI permissions.
+
+4.2. Evaluated Framework & Language Options
+  - Option 1: Tauri v2 (Frontend: React/TypeScript | Backend: TS/Rust)
+    * Best choice if leveraging web/React skills. Produces tiny binaries (~8 MB),
+      uses low RAM, and compiles to Linux, Windows, and Android from one project.
+  - Option 2: Flutter (Frontend: Flutter Widgets | Backend: Dart)
+    * Best choice for pixel-identical rendering across Linux (Wayland/X11),
+      Windows, and Android without relying on OS WebViews.
+  - Option 3: Flet (Frontend: Flutter Engine | Backend: Python)
+    * Best choice for rapid development entirely in Python while still packaging
+      for Desktop and Android (`flet build apk`).
+  - Option 4: Compose Multiplatform (Frontend: Compose | Backend: Kotlin)
+    * Best choice for native Android integration and JVM/Kotlin ecosystems.
+
+4.3. Planned Feature Roadmap for GUI v2.0
+  - [Phase 1: Core Migration] Port the Bash regex sanitizer and AniList GraphQL
+    client into the chosen cross-platform language (TypeScript, Dart, or Python).
+  - [Phase 2: Interactive Preview Table] Replace `--dry-run` terminal text with
+    a two-column GUI table ("Current Name" -> "Proposed Name") where users can
+    toggle individual folders on/off before applying changes.
+  - [Phase 3: Custom Formatting Templates] Allow users to choose between
+    prepending `(English) Original`, appending `Original (English)`, or
+    replacing `English [Season/Resolution]` via a settings menu.
+  - [Phase 4: Undo / Rollback History] Save a local JSON transaction log of
+    every batch rename operation so users can revert folder names with one click.
+  - [Phase 5: Android APK Release] Implement the Android Storage Access
+    Framework adapter and publish an APK alongside the Linux and Windows builds.
+================================================================================

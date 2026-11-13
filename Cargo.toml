@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/renamer-core",
+    "crates/renamer-cli",
+    "crates/renamer-gui",
+]
+
+[workspace.package]
+version = "2.0.0"
+edition = "2021"
+license = "MIT"

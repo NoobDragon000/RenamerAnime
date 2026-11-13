@@ -1,0 +1,13 @@
+[package]
+name = "renamer-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+native-tls = "0.2"
+regex = "1.11"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+ureq = { version = "2.12", default-features = false, features = ["json", "native-tls"] }

@@ -1,0 +1,14 @@
+V1.0
+-The script failed because it was scanning regular folders as well
+
+V1.1
+-The script fails when connecting to Jikan API
+
+-----------
+
+ -API access rate fix
+ -Display the files renamed, errors
+ -Add Changing of names in subfolders
+ -Add start on boot
+ -Add dirctory monitoring
+
